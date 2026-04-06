@@ -5,8 +5,43 @@
 
 #include "common/treelandlogging.h"
 
+#include <QFileInfo>
 #include <QObject>
 #include <QUrl>
+
+namespace {
+
+QUrl normalizeLocalUrl(const QString &path)
+{
+    if (path.isEmpty()) {
+        return {};
+    }
+
+    if (path.startsWith("file::/") && !path.startsWith("file:///")) {
+        return QUrl::fromLocalFile(path.mid(6));
+    }
+
+    const QUrl url = QUrl::fromUserInput(path);
+    if (url.isLocalFile()) {
+        if (!QFileInfo::exists(url.toLocalFile())) {
+            return {};
+        }
+
+        return QUrl::fromLocalFile(url.toLocalFile());
+    }
+
+    if (path.startsWith('/')) {
+        if (!QFileInfo::exists(path)) {
+            return {};
+        }
+
+        return QUrl::fromLocalFile(path);
+    }
+
+    return url;
+}
+
+} // namespace
 
 struct UserPrivate
 {
@@ -37,7 +72,7 @@ void UserPrivate::updateUserData()
     userName = inter->userName();
     fullName = inter->fullName();
     homeDir = inter->homeDir();
-    icon = inter->iconFile();
+    icon = normalizeLocalUrl(inter->iconFile());
     passwordHint = inter->passwordHint();
     locale = QLocale{ inter->locale() };
 }

@@ -25,7 +25,7 @@ static void switchToGreeter([[maybe_unused]] struct wl_client *client, [[maybe_u
 static void switchToUser([[maybe_unused]] struct wl_client *client, [[maybe_unused]] struct wl_resource *resource, const char *username) {
     auto user = QString::fromLocal8Bit(username);
     auto helper = Helper::instance();
-    if (user == "ddm") {
+    if (user == "ddm" || user == "dde" || !helper->userModel()->getUser(user)) {
         helper->showLockScreen(false);
     } else if (user != helper->userModel()->currentUserName()) {
         helper->userModel()->setCurrentUserName(QString(username));

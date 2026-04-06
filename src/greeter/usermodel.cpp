@@ -43,6 +43,15 @@
 using namespace DDM;
 DACCOUNTS_USE_NAMESPACE
 
+namespace {
+
+bool isGreeterSelectableUser(const QString &userName)
+{
+    return !userName.isEmpty() && userName != "dde" && userName != "ddm";
+}
+
+} // namespace
+
 struct UserModelPrivate
 {
     bool containsAllUsers{ true };
@@ -115,7 +124,7 @@ UserModel::UserModel(QObject *parent)
     auto lastUserName = stateConfig.Last.User.get();
 
     for (const auto &user : d->users) {
-        if (user->userName() == lastUserName) {
+        if (user->userName() == lastUserName && isGreeterSelectableUser(lastUserName)) {
             d->lastIndex = d->users.indexOf(user);
             d->currentUserName = user->userName();
             break;
@@ -124,7 +133,7 @@ UserModel::UserModel(QObject *parent)
 
     if (d->currentUserName.isEmpty()) {
         qCWarning(treelandGreeter) << "Couldn't find last user, using current running user as current user";
-        d->currentUserName = d->users.first()->userName();
+        d->currentUserName = fallbackUserName();
     }
 }
 
@@ -311,11 +320,22 @@ void UserModel::updateUserLimits(const QString &userName, const QString &time) c
 
 void UserModel::setCurrentUserName(const QString &userName) noexcept
 {
-    d->currentUserName = userName;
+    QString nextUserName = userName;
+    const auto nextUser = getUser(nextUserName);
+    if (!nextUser || !isGreeterSelectableUser(nextUser->userName())) {
+        nextUserName = fallbackUserName();
+        qCWarning(treelandGreeter) << "Couldn't find user:" << userName << ", fallback to:" << nextUserName;
+    }
+
+    if (nextUserName.isEmpty() || d->currentUserName == nextUserName) {
+        return;
+    }
+
+    d->currentUserName = nextUserName;
 
     for (const auto &user : d->users) {
         if (user->waylandSocket()) {
-            user->waylandSocket()->setEnabled(user->userName() == userName,
+            user->waylandSocket()->setEnabled(user->userName() == nextUserName,
                                               Helper::instance()->sessionManager()->globalSession()->socket());
         }
     }
@@ -354,4 +374,20 @@ void UserModel::onUserDeleted(quint64 uid)
     endResetModel();
 
     Q_EMIT countChanged();
+}
+
+QString UserModel::fallbackUserName() const noexcept
+{
+    for (const auto &user : d->users) {
+        const QString &userName = user->userName();
+        if (isGreeterSelectableUser(userName)) {
+            return userName;
+        }
+    }
+
+    if (!d->users.isEmpty()) {
+        return d->users.first()->userName();
+    }
+
+    return {};
 }

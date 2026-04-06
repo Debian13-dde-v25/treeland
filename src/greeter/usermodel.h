@@ -92,6 +92,7 @@ private Q_SLOTS:
     void onUserDeleted(quint64 uid);
 
 private:
+    [[nodiscard]] QString fallbackUserName() const noexcept;
     UserModelPrivate *d{ nullptr };
 };
 

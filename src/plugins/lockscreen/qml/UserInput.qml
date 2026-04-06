@@ -271,15 +271,15 @@ Item {
                 radius: 4
             }
 
-            HintLabel {
-                id: hintLabel
-                x: hintBtn.width - hintLabel.width
-                y: hintBtn.height + 11
-                hintText: {
-                    let user = UserModel.get(UserModel.currentUserName)
-                    return user.passwordHint
+                HintLabel {
+                    id: hintLabel
+                    x: hintBtn.width - hintLabel.width
+                    y: hintBtn.height + 11
+                    hintText: {
+                        let user = UserModel.get(UserModel.currentUserName)
+                        return user && user.passwordHint ? user.passwordHint : ""
+                    }
                 }
-            }
 
             onClicked: hintLabel.open()
         }
@@ -302,7 +302,14 @@ Item {
 
     function updateUser() {
         let currentUser = UserModel.get(UserModel.currentUserName)
-        username.text = currentUser.realName.length === 0 ? currentUser.name : currentUser.realName
+        if (!currentUser || currentUser.name === undefined) {
+            username.text = ""
+            passwordField.text = ""
+            avatar.fallbackSource = ""
+            hintText.text = normalHint
+            return
+        }
+        username.text = !currentUser.realName || currentUser.realName.length === 0 ? currentUser.name : currentUser.realName
         passwordField.text = ''
         avatar.fallbackSource = currentUser.icon
         hintText.text = normalHint
@@ -310,6 +317,8 @@ Item {
 
     function userLogin() {
         let user = UserModel.get(UserModel.currentUserName)
+        if (!user || user.name === undefined)
+            return
         if (user.loggedIn)
             GreeterProxy.unlock(user.name, passwordField.text)
         else

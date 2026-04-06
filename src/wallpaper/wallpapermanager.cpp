@@ -9,8 +9,10 @@
 #include "modules/wallpaper/wallpapershellinterfacev1.h"
 #include "shellhandler.h"
 
+#include <QFile>
 #include <QMimeDatabase>
 #include <QMimeType>
+#include <QStringList>
 
 #define DEFAULT_WALLPAPER "/usr/share/wallpapers/deepin/deepin-default.jpg"
 
@@ -19,6 +21,23 @@ enum class WallpaperType {
     Video,
     Unknown
 };
+
+static QString defaultWallpaperPath()
+{
+    static const QStringList candidates {
+        QStringLiteral(DEFAULT_WALLPAPER),
+        QStringLiteral("/usr/share/backgrounds/default_background.jpg"),
+        QStringLiteral("/usr/share/backgrounds/default_background.png"),
+    };
+
+    for (const auto &path : candidates) {
+        if (QFile::exists(path)) {
+            return path;
+        }
+    }
+
+    return QStringLiteral(DEFAULT_WALLPAPER);
+}
 
 static WallpaperType detectWallpaperType(const QString &path)
 {
@@ -36,6 +55,45 @@ static WallpaperType detectWallpaperType(const QString &path)
     }
 
     return WallpaperType::Unknown;
+}
+
+static QString normalizedWallpaperPath(const QString &path,
+                                       TreelandWallpaperInterfaceV1::WallpaperType &wallpaperType)
+{
+    const auto detectedType = detectWallpaperType(path);
+    if (detectedType == WallpaperType::Unknown) {
+        wallpaperType = TreelandWallpaperInterfaceV1::Image;
+        return defaultWallpaperPath();
+    }
+
+    wallpaperType = static_cast<TreelandWallpaperInterfaceV1::WallpaperType>(detectedType);
+    return path;
+}
+
+static bool normalizeWallpaperConfig(WallpaperOutputConfig &outputConfig)
+{
+    bool changed = false;
+
+    auto lockType = outputConfig.lockScreenWallpapertype;
+    const auto lockPath = normalizedWallpaperPath(outputConfig.lockscreenWallpaper, lockType);
+    if (outputConfig.lockscreenWallpaper != lockPath || outputConfig.lockScreenWallpapertype != lockType) {
+        outputConfig.lockscreenWallpaper = lockPath;
+        outputConfig.lockScreenWallpapertype = lockType;
+        changed = true;
+    }
+
+    for (auto &workspaceConfig : outputConfig.workspaces) {
+        auto desktopType = workspaceConfig.desktopWallpapertype;
+        const auto desktopPath = normalizedWallpaperPath(workspaceConfig.desktopWallpaper, desktopType);
+        if (workspaceConfig.desktopWallpaper != desktopPath
+            || workspaceConfig.desktopWallpapertype != desktopType) {
+            workspaceConfig.desktopWallpaper = desktopPath;
+            workspaceConfig.desktopWallpapertype = desktopType;
+            changed = true;
+        }
+    }
+
+    return changed;
 }
 
 WallpaperManager::WallpaperManager(QObject *parent)
@@ -85,13 +143,16 @@ WallpaperOutputConfig WallpaperManager::getOutputConfig(const QString &id)
 void WallpaperManager::updateWallpaperConfig()
 {
     m_wallpaperConfig.clear();
+    bool normalized = false;
     if (!Helper::instance()->m_config->wallpaperConfig().isEmpty()) {
         QJsonDocument doc = QJsonDocument::fromJson(Helper::instance()->m_config->wallpaperConfig().toUtf8());
         if (doc.isArray()) {
             QJsonArray jsonArray = doc.array();
             for (const QJsonValue& value : jsonArray) {
                 QJsonObject obj = value.toObject();
-                m_wallpaperConfig.append(WallpaperOutputConfig::fromJson(obj));
+                auto outputConfig = WallpaperOutputConfig::fromJson(obj);
+                normalized |= normalizeWallpaperConfig(outputConfig);
+                m_wallpaperConfig.append(outputConfig);
             }
         } else {
             qCCritical(treelandWallpaper) << "wallpapers config value error: Expected a JSON array, but got something else.";
@@ -99,6 +160,11 @@ void WallpaperManager::updateWallpaperConfig()
     } else {
         defaultWallpaperConfig();
     }
+
+    if (normalized) {
+        Helper::instance()->m_config->setWallpaperConfig(wallpaperConfigToJsonString());
+    }
+
     m_wallpaperConfigUpdated = true;
 }
 
@@ -113,7 +179,7 @@ void WallpaperManager::defaultWallpaperConfig()
         outputConfig.enable = output->output()->nativeHandle()->enabled;
         WallpaperType type = detectWallpaperType(outputConfig.lockscreenWallpaper);
         if (type == WallpaperType::Unknown) {
-            outputConfig.lockscreenWallpaper = DEFAULT_WALLPAPER;
+            outputConfig.lockscreenWallpaper = defaultWallpaperPath();
             outputConfig.lockScreenWallpapertype = TreelandWallpaperInterfaceV1::Image;
         } else {
             outputConfig.lockScreenWallpapertype = static_cast<TreelandWallpaperInterfaceV1::WallpaperType>(type);
@@ -126,7 +192,7 @@ void WallpaperManager::defaultWallpaperConfig()
             workspaceConfig.enable = true;
             WallpaperType type = detectWallpaperType(workspaceConfig.desktopWallpaper);
             if (type == WallpaperType::Unknown) {
-                workspaceConfig.desktopWallpaper = DEFAULT_WALLPAPER;
+                workspaceConfig.desktopWallpaper = defaultWallpaperPath();
                 workspaceConfig.desktopWallpapertype = TreelandWallpaperInterfaceV1::Image;
             } else {
                 workspaceConfig.desktopWallpapertype = static_cast<TreelandWallpaperInterfaceV1::WallpaperType>(type);
@@ -443,4 +509,3 @@ void WallpaperManager::handleWallpaperSurfaceAdded([[maybe_unused]] TreelandWall
         }
     }
 }
-

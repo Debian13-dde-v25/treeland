@@ -10,12 +10,37 @@
 
 DCORE_USE_NAMESPACE
 
+namespace {
+
+QString normalizeLogoUrl(const QString &logo)
+{
+    if (logo.isEmpty()) {
+        return {};
+    }
+
+    if (logo.startsWith("file::/") && !logo.startsWith("file:///")) {
+        return QUrl::fromLocalFile(logo.mid(6)).toString();
+    }
+
+    if (logo.startsWith(":/")) {
+        return QStringLiteral("qrc%1").arg(logo);
+    }
+
+    const QUrl url = QUrl::fromUserInput(logo);
+    if (url.isLocalFile()) {
+        return QUrl::fromLocalFile(url.toLocalFile()).toString();
+    }
+
+    return url.toString();
+}
+
+} // namespace
+
 [[nodiscard]] QString LogoProvider::logo() noexcept
 {
-    auto url = QUrl::fromUserInput(DSysInfo::distributionOrgLogo(DSysInfo::Distribution,
-                                                                 DSysInfo::Transparent,
-                                                                 ":/dsg/logo.svg"));
-    return url.toString();
+    return normalizeLogoUrl(DSysInfo::distributionOrgLogo(DSysInfo::Distribution,
+                                                          DSysInfo::Transparent,
+                                                          ":/dsg/icons/logo.svg"));
 }
 
 [[nodiscard]] QString LogoProvider::version() const noexcept

@@ -1340,11 +1340,10 @@ void Helper::init(Treeland::Treeland *treeland)
                                                   "/" + m_userModel->currentUserName()));
         auto user = m_userModel->currentUser();
         m_personalization->setUserId(user ? user->UID() : getuid());
-        // TODO(YaoBing Xiao): remove "dde"
+        // User "dde" is only used by the greeter and does not own a real session config.
         if (m_userModel->currentUserName() == "dde") {
             return;
         }
-
         // TODO(YaoBing Xiao): pre-initialize dconfig, remove isInitializeSucceeded
 #if TREELANDCONFIG_DCONFIG_FILE_VERSION_MINOR > 0
         if (m_config->isInitializeSucceeded()) {
